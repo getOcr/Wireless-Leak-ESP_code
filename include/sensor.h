@@ -14,7 +14,7 @@ public:
     /**
      * Initializes the sensor.
     */
-    virtual void initalize();
+    virtual void initialize();
 
     /**
      * Reads values from the accelerometer and stores them into the pointer.
@@ -36,7 +36,7 @@ public:
 class LIS3DHH : public BaseSensor {
 public:
     LIS3DHH();
-    void initalize();
+    void initialize();
     void read(int16_t* storage);
     uint8_t axes() { return 3; };
 };
@@ -47,13 +47,14 @@ public:
 class MMA8451 : public BaseSensor {
 public:
     MMA8451();
-    void initalize();
+    void initialize();
     void read(int16_t* storage);
     uint8_t axes() { return 3; };
 private: 
     Adafruit_MMA8451 mma;
 };
 
+void checkWhoAmI();
 /**
  * Handling for the IIS2ICLX sensor from ST.
  * Datasheet: https://www.st.com/resource/en/datasheet/iis2iclx.pdf

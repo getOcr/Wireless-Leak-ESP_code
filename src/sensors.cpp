@@ -56,27 +56,46 @@ LIS3DHH::LIS3DHH() {
     
 }
 
-void LIS3DHH::initalize() {
+void LIS3DHH::initialize() {
     pinMode(SPI_CS, OUTPUT);
     SPI.begin();
 
     // Read WHO_AM_I to ensure correct device
+    checkWhoAmI();
     uint8_t whoami = spiRead(WHO_AM_I);
 
-    if (whoami != 0x11) {
+    if (whoami != 0x33) { //0x11 is the default ID
         Serial.printf("Found wrong WAI: %02x", whoami);
         while (true) {}
     }
+    Serial.println("sensor detected!");
 
     // SW Reset
-    spiWrite(CTRL_REG1, 0x04);
+    //spiWrite(CTRL_REG1, 0x04);
 
+    // SW Reset（LIS3DH's reset register is CTRL_REG2 (0x21)）
+    spiWrite(0x21, 0x04);  // reset
+    delay(10);  // wait for reset
+
+    // set CTRL_REG1（enable XYZ axis，sample rate: 100Hz）
+    spiWrite(CTRL_REG1, 0x57);  // 0x57 = 100Hz 
+    
     // Wait for reset to go low
-    while ((spiRead(CTRL_REG1) & 0x4) != 0);
+    //while ((spiRead(CTRL_REG1) & 0x4) != 0);
 
-    spiWrite(CTRL_REG1, 0x80 | 0x40 | 0x01); // Enable the device, SPI Addr Increment, and BDU
+    //spiWrite(CTRL_REG1, 0x80 | 0x40 | 0x01); // Enable the device, SPI Addr Increment, and BDU
 
     Serial.printf("LIS3DHH sucessfully initalized.\n");
+}
+void checkWhoAmI() {
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));  // 试试 SPI_MODE3
+    digitalWrite(5, LOW);  // 确保 CS 正确拉低
+    SPI.transfer(0x8F);  // 0x0F | 0x80 (读取 WHO_AM_I)
+    uint8_t whoami = SPI.transfer(0x00);  // 读取返回值
+    digitalWrite(5, HIGH);
+    SPI.endTransaction();
+
+    Serial.printf("handy WHO_AM_I register: 0x%02X\n", whoami);
 }
 
 void LIS3DHH::read(int16_t* storage) {
@@ -93,7 +112,7 @@ void LIS3DHH::read(int16_t* storage) {
 MMA8451::MMA8451(): mma() {
 }
 
-void MMA8451::initalize() {
+void MMA8451::initialize() {
     if (!this->mma.begin()) {
         Serial.println("Unable to connect to MMA");
         while(1);

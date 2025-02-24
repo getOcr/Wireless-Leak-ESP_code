@@ -19,11 +19,11 @@ void sendId(uint8_t packetId) {
  * Receives information about the pair.
 */
 void receivePair(IPAddress* address, uint16_t* port, uint16_t* id) {
-    uint8_t pair[9] = {0};
-    while (client.available() < 9);
-    client.readBytes(reinterpret_cast<uint8_t*>(&pair), 9);
+    uint8_t pair[9] = {0}; //000 000 000
+    while (client.available() < 9); // make sure receive 9 bytes from server
+    client.readBytes(reinterpret_cast<uint8_t*>(&pair), 9); // read bytes then store in pair
 
-    if (pair[0] != 2) {
+    if (pair[0] != server_Header) {
         Serial.printf("Invalid packet id for pair data: %d", pair[0]);
         return;
     }
@@ -113,7 +113,7 @@ const uint16_t maxSamples = 9000 * 3;
 */
 int16_t sampleData [maxSamples];
 
-void collectData(BaseSensor& sensor) {
+int16_t* collectData(BaseSensor& sensor) {
     const uint32_t SAMPLE_MICROS = 1000000; // microsec for 1 sec
 
     // Collect the sample data
@@ -133,9 +133,9 @@ void collectData(BaseSensor& sensor) {
     }
     Serial.printf("Collected %d samples in 1 second!\n", collectedSamples);
 
-    // Send the data header packet
+    /*// Send the data header packet
     char data[] = {
-        3,
+        sensorData_Header,
         (collectedSamples >> 8) & 0xFF,
         (collectedSamples) & 0xFF,
         sensor.axes()
@@ -153,5 +153,24 @@ void collectData(BaseSensor& sensor) {
 
         client.write((char *) (&sampleData[i]), sending);
     }
-    Serial.printf("Sent data to server.\n");
+    Serial.printf("Sent data to server.\n");*/
+    
+    // send data to PC，every sample costs 2 bytes（int16_t）
+    for (int i = 0; i < collectedSamples; i++) {
+        Serial.printf("%d ", sampleData[i]); 
+    }
+
+    Serial.println("\nEND_DATA"); // end of data sending
+    Serial.flush(); // make sure sent
+
+    Serial.println("Data Transmission to PC Complete.");
+
+    return sampleData;
+}
+
+void goToSleep(uint32_t sleep_time) {
+    Serial.printf("Going to sleep for %d seconds...\n", sleep_time);
+    
+    esp_sleep_enable_timer_wakeup(sleep_time * 1000000ULL); // unit: microS
+    esp_deep_sleep_start();  // deep sleep
 }

@@ -11,3 +11,7 @@ extern WiFiClient client;
  * The ID for the device.
 */
 extern uint16_t id;
+
+#define ESP_Header 1
+#define server_Header 2
+#define sensorData_Header 3
