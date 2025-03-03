@@ -51,13 +51,16 @@ void setup() {
 
     // LoRa
     LoRa_init();
+
+    // LoRa connect check
+    LoRa_connectCheck();
 }
 
 void loop() {
     // Collect the data
     int16_t* LoRadata = collectData(sensor);
 
-    Serial.println("Sending sensor data via LoRa...");
+    //Serial.println("Sending sensor data via LoRa...");
 
     // Send the data via LoRa
     uint8_t data[6] = { LoRadata[0] >> 8, LoRadata[0] & 0xFF,
@@ -84,5 +87,5 @@ void loop() {
         delay(1000 * sleep_time);
         ESP.restart();*/
 
-    goToSleep(60); // deep sleep for 60s
+    goToSleep(30); // deep sleep for 30s
 }

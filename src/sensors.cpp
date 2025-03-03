@@ -61,10 +61,10 @@ void LIS3DHH::initialize() {
     SPI.begin();
 
     // Read WHO_AM_I to ensure correct device
-    checkWhoAmI();
+    //checkWhoAmI();
     uint8_t whoami = spiRead(WHO_AM_I);
 
-    if (whoami != 0x33) { //0x11 is the default ID
+    if (whoami != 0x33) { //0x11 is the default ID for LIS3DHH, 0x33 is for LIS3DH
         Serial.printf("Found wrong WAI: %02x", whoami);
         while (true) {}
     }
@@ -87,11 +87,13 @@ void LIS3DHH::initialize() {
 
     Serial.printf("LIS3DHH sucessfully initalized.\n");
 }
+
+// checkWhoAmI() is used for debug
 void checkWhoAmI() {
-    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));  // 试试 SPI_MODE3
-    digitalWrite(5, LOW);  // 确保 CS 正确拉低
-    SPI.transfer(0x8F);  // 0x0F | 0x80 (读取 WHO_AM_I)
-    uint8_t whoami = SPI.transfer(0x00);  // 读取返回值
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));  // try SPI_MODE3
+    digitalWrite(5, LOW);  // make sure cs low
+    SPI.transfer(0x8F);  // 0x0F | 0x80 (read WHO_AM_I)
+    uint8_t whoami = SPI.transfer(0x00);  // 
     digitalWrite(5, HIGH);
     SPI.endTransaction();
 

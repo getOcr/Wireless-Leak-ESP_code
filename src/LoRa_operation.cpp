@@ -25,22 +25,25 @@ void os_getArtEui (u1_t* buf) { memcpy(buf, APPEUI, 8); }
 void os_getDevEui (u1_t* buf) { memcpy(buf, DEVEUI, 8); }
 void os_getDevKey (u1_t* buf) { memcpy(buf, APPKEY, 16); }
 
-// LoRa frequency（915 MHz for US，868 MHz for EU）
+//  LoRa frequency（915 MHz for US，868 MHz for EU）
 const lmic_pinmap lmic_pins = {
-    .nss = 5,      // 
+    .nss = 5,      // chip select
     .rxtx = LMIC_UNUSED_PIN,
-    .rst = 14,     // 
-    .dio = {2, 21, 22} // DIO0, DIO1, DIO2
+    //.rst = 14,     // reset
+    .rst = LMIC_UNUSED_PIN,
+    //.dio = {2, 21, 22} // DIO0, DIO1, DIO2
+    .dio = {2, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN}
 };
 
-void onEvent(ev_t ev) {
+//  ev_t is defined by LMIC to indicate the state of LoRa module
+void onEvent(ev_t ev) { 
     switch(ev) {
         case EV_JOINING:
             Serial.println("Joining LoRa network...");
             break;
         case EV_JOINED:
-            Serial.println("LoRa joined successfully!");
-            LoRa_joined = true;
+            Serial.println("LoRa joined successfully!"  );
+            LoRa_joined = true; // flag
             break;
         case EV_TXCOMPLETE:
             Serial.println("LoRa TX complete!");
@@ -56,10 +59,11 @@ void LoRa_init() {
     os_init();
     LMIC_reset();
 
-    // Set frequency
+    //  Set frequency
     LMIC_selectSubBand(1);  //  US915
-
-    // start OTAA
+    //  Set data rate
+    //LMIC_setDrTxpow(DR4, 14); // DR4: 222 字节
+    //  Start OTAA
     LMIC_startJoining();
 }
 
@@ -76,4 +80,13 @@ void LoRa_sendData(const uint8_t* data, size_t size) {
 
     Serial.printf("Sending LoRa data: %d bytes\n", size);
     LMIC_setTxData2(1, (uint8_t*)data, size, 0);
+}
+
+void LoRa_connectCheck(){
+    Serial.println("Waiting for LoRaWAN join...");
+    while (!LoRa_joined) {
+        Serial.print(".");
+        delay(1000);
+    }
+    Serial.println("\nLoRaWAN Joined!");
 }
