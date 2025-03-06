@@ -12,9 +12,13 @@
 #include "esp_sleep.h"
 #include <LoRa_operation.h>
 
-#define RESET_PAIR 12
+//#define RESET_PAIR 12
 
 LIS3DHH sensor;
+
+extern "C" void printSerial(const char* msg) {
+    Serial.println(msg);
+}
 
 void setup() {
     // Initialize Serial
@@ -44,11 +48,14 @@ void setup() {
     Serial.println("WiFi disabled!");
 
     // sensor initialize
-    sensor.initialize();
+    //sensor.initialize();
 
     /*// Sync to the other ESP
     synchronize();*/
 
+    //SPI.begin(18, 19, 23, 5); // SCK, MISO, MOSI, CS (NSS)
+    //Serial.println("SPI fffffkkkkk");
+    
     // LoRa
     LoRa_init();
 
@@ -58,16 +65,22 @@ void setup() {
 
 void loop() {
     // Collect the data
-    int16_t* LoRadata = collectData(sensor);
+    //int16_t* LoRadata = collectData(sensor);
 
     //Serial.println("Sending sensor data via LoRa...");
 
     // Send the data via LoRa
-    uint8_t data[6] = { LoRadata[0] >> 8, LoRadata[0] & 0xFF,
+    /*uint8_t data[6] = { LoRadata[0] >> 8, LoRadata[0] & 0xFF,
                          LoRadata[1] >> 8, LoRadata[1] & 0xFF,
                          LoRadata[2] >> 8, LoRadata[2] & 0xFF };
+    LoRa_sendData(data, sizeof(data));*/
+
+    uint8_t test_data[4] = { 0x12, 0x34, 0x56, 0x78 };
+    LoRa_sendData(test_data, sizeof(test_data));
+
+    Serial.println("Test data sent. Sleeping for 30 seconds...");
     
-    LoRa_sendData(data, sizeof(data));
+    //LoRa_sendData(test_data, sizeof(test_data));
 
         /*// Sleep the ESP.
         // TODO: Move sleep logic into a better sleep system that properly deep sleeps the ESP

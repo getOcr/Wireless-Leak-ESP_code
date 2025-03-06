@@ -27,12 +27,15 @@ void os_getDevKey (u1_t* buf) { memcpy(buf, APPKEY, 16); }
 
 //  LoRa frequency（915 MHz for US，868 MHz for EU）
 const lmic_pinmap lmic_pins = {
-    .nss = 5,      // chip select
+    .nss = 33,      // chip select
     .rxtx = LMIC_UNUSED_PIN,
-    //.rst = 14,     // reset
-    .rst = LMIC_UNUSED_PIN,
-    //.dio = {2, 21, 22} // DIO0, DIO1, DIO2
-    .dio = {2, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN}
+    .rst = 32,     // reset
+    //.rst = LMIC_UNUSED_PIN,
+    .dio = {13, 27, 12}, // DIO0, DIO1, DIO2
+    //.dio = {2, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN}
+    .rxtx_rx_active = 0,
+    .rssi_cal = 0,
+    .spi_freq = 0
 };
 
 //  ev_t is defined by LMIC to indicate the state of LoRa module
@@ -57,7 +60,9 @@ void onEvent(ev_t ev) {
 void LoRa_init() {
     Serial.println("Initializing LoRa...");
     os_init();
+    Serial.println("os_init() finished");
     LMIC_reset();
+    Serial.println("LMIC_reset() finished");
 
     //  Set frequency
     LMIC_selectSubBand(1);  //  US915

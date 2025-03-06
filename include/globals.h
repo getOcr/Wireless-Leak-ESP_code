@@ -1,6 +1,7 @@
 #pragma once
 
 #include <WiFi.h>
+#include <SPI.h>
 /**
  * The wifi client (TCP) used to communicate with the server.
 */
