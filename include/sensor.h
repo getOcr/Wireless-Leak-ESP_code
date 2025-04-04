@@ -6,9 +6,15 @@
 #include <Adafruit_MMA8451.h>
 #include <Adafruit_Sensor.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
 /**
  * A base abstraction for the sensors.
 */
+//#define QUEUE_SIZE 10  // 
+//QueueHandle_t sensorDataQueue;
+
 class BaseSensor {
 public:
     /**
@@ -26,6 +32,17 @@ public:
      * The number of axes supported by the accelerometer
     */
     virtual uint8_t axes();
+
+/*private:
+    // sensor collection task（higher prioritized comparerd to LoRa collection）
+    static void SensorTask(void *pvParameters) {
+        int16_t sensorData[3];
+        while (1) {
+            read(sensorData);  
+            xQueueSend(sensorDataQueue, sensorData, portMAX_DELAY);  // store in queue
+            vTaskDelay(pdMS_TO_TICKS(100));  // sampling interval: 100ms
+        }
+    }*/
 };
 
 /**
@@ -39,6 +56,7 @@ public:
     void initialize();
     void read(int16_t* storage);
     uint8_t axes() { return 3; };
+
 };
 
 /**

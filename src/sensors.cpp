@@ -51,6 +51,11 @@ void spiWrite(uint8_t address, uint8_t data) {
 #define CTRL_REG1 0x20
 #define STATUS 0x27
 #define X_LOW 0x28
+#define LIS3DH_REG_OUT_X_H 0x29
+#define LIS3DH_REG_OUT_Y_L 0x2A
+#define LIS3DH_REG_OUT_Y_H 0x2B
+#define LIS3DH_REG_OUT_Z_L 0x2C
+#define LIS3DH_REG_OUT_Z_H 0x2D
 
 LIS3DHH::LIS3DHH() {
     
@@ -101,13 +106,13 @@ void checkWhoAmI() {
 }
 
 void LIS3DHH::read(int16_t* storage) {
-    uint8_t data[6] = { 0 };
+    uint8_t data[6] = { 0 }; // 6 8bits data: xl xh yl yh zl zh
 
     spiRead(X_LOW, data, 6); 
 
-    storage[0] = (int16_t) ((((uint16_t) data[1]) << 8) | data[0]);
-    storage[1] = (int16_t) ((((uint16_t) data[3]) << 8) | data[2]);
-    storage[2] = (int16_t) ((((uint16_t) data[5]) << 8) | data[4]);
+    storage[0] = (int16_t) ((((uint16_t) data[1]) << 8) | data[0]); // x
+    storage[1] = (int16_t) ((((uint16_t) data[3]) << 8) | data[2]); // y
+    storage[2] = (int16_t) ((((uint16_t) data[5]) << 8) | data[4]); // z
 }
 
 // Wrapper class for the mma sensor

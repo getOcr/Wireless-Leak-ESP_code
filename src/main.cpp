@@ -57,13 +57,29 @@ void setup() {
     //Serial.println("SPI fffffkkkkk");
     
     // LoRa
-    LoRa_init();
+    bool LoRa_joined = LoRa_init();
 
     // LoRa connect check
-    LoRa_connectCheck();
+    //LoRa_connectCheck();
+    
+    // create queue
+    //sensorDataQueue = xQueueCreate(QUEUE_SIZE, sizeof(int16_t) * 3);
+
+    // create tasks
+    //xTaskCreatePinnedToCore(sensor.SensorTask, "SensorTask", 4096, NULL, 2, NULL, 1);
+    //xTaskCreatePinnedToCore(LoRaTask, "LoRaTask", 4096, NULL, 1, NULL, 1);
+    //xTaskCreatePinnedToCore(SleepTask, "SleepTask", 2048, NULL, 0, NULL, 1);
+    
+    uint8_t test_data[4] = { 0x12, 0x34, 0x56, 0x78 };
+    if(LoRa_joined){
+        
+        LoRa_sendData(test_data, sizeof(test_data));
+        Serial.println("Connected and Test data sent.");
+    } 
 }
 
 void loop() {
+    //os_runloop_once();
     // Collect the data
     //int16_t* LoRadata = collectData(sensor);
 
@@ -75,10 +91,10 @@ void loop() {
                          LoRadata[2] >> 8, LoRadata[2] & 0xFF };
     LoRa_sendData(data, sizeof(data));*/
 
-    uint8_t test_data[4] = { 0x12, 0x34, 0x56, 0x78 };
-    LoRa_sendData(test_data, sizeof(test_data));
+    //uint8_t test_data[4] = { 0x12, 0x34, 0x56, 0x78 };
+    //LoRa_sendData(test_data, sizeof(test_data));
 
-    Serial.println("Test data sent. Sleeping for 30 seconds...");
+    //Serial.println("Test data sent. Sleeping for 30 seconds...");
     
     //LoRa_sendData(test_data, sizeof(test_data));
 
@@ -100,5 +116,5 @@ void loop() {
         delay(1000 * sleep_time);
         ESP.restart();*/
 
-    goToSleep(30); // deep sleep for 30s
+    //goToSleep(30); // deep sleep for 30s
 }
