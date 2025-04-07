@@ -5,6 +5,7 @@
 #include <Arduino.h>
 
 extern const lmic_pinmap lmic_pins;  // lmic_pinmap is defined in <hal/hal.h> other than <lmic.h>
+extern bool LoRa_joined;
 
 bool LoRa_init();
 

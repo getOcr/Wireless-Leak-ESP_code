@@ -15,7 +15,23 @@
 #include <LoRa_operation.h>
 #include <EEPROM.h>
 
-static bool LoRa_joined = false;
+static osjob_t sendjob; //is a struct for task schedule in LMIC
+static uint8_t queuedPayload[51] = {0};  //
+static size_t payloadSize;
+// static bool LoRa_joined = false;
+extern bool LoRa_joined = false;
+// For periodic sending--Schedule TX every this many seconds 
+const unsigned TX_INTERVAL = 60; // (might become longer due to duty cycle limitations).
+
+void do_send(osjob_t* j) {
+    if (LMIC.opmode & OP_TXRXPEND) {
+        Serial.println(F("OP_TXRXPEND, not sending"));
+    } else {
+        LMIC_setTxData2(1, queuedPayload, payloadSize, 0); //the last parameter: 0-->unconform 1-->conform
+        Serial.println(F("LoRa Packet queued"));
+    }
+    // time for next round sending is set in EV_TXCOMPLETE
+}
 
 // used to check if EUI is right before sending, in case of error fromm Flash to buf
 void debugEUI(const char* label, const uint8_t* eui) {
@@ -29,8 +45,8 @@ void debugEUI(const char* label, const uint8_t* eui) {
 // LoRaWAN device info
 // PROGMEM means data is stored in Flash instead of RAM
 static const u1_t PROGMEM APPEUI[8] = { 0xAE, 0x82, 0x02, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };  // identifier of TTN or ChirpStack server
-//static const u1_t PROGMEM DEVEUI[8] = { 0xC8, 0x41, 0x00, 0xD8, 0x7E, 0xD5, 0xB3, 0x70 }; // identifier of LoRaWAN end device
-static const u1_t PROGMEM DEVEUI[8] = { 0x1E, 0x43, 0x00, 0xD8, 0x7E, 0xD5, 0xB3, 0x70 }; // for 104dev
+static const u1_t PROGMEM DEVEUI[8] = { 0xC8, 0x41, 0x00, 0xD8, 0x7E, 0xD5, 0xB3, 0x70 }; // identifier of LoRaWAN end device
+//static const u1_t PROGMEM DEVEUI[8] = { 0x1E, 0x43, 0x00, 0xD8, 0x7E, 0xD5, 0xB3, 0x70 }; // for 1.0.4dev which will introduce the problem of "DevNounce is too small"
 static const u1_t PROGMEM APPKEY[16] = { 0x25, 0x0D, 0x30, 0x53, 0xAD, 0x8F, 0xE4, 0x6C, 0x66, 0x1E, 0x3A, 0x4C, 0xB0, 0xC7, 0x1C, 0x57 };  // 
 
 void os_getArtEui (u1_t* buf) { memcpy(buf, APPEUI, 8); debugEUI("AppEUI", buf);}
@@ -50,70 +66,131 @@ const lmic_pinmap lmic_pins = {
     .spi_freq = 0
 };
 
+void printHex2(unsigned v) {
+    v &= 0xff;
+    if (v < 16)
+        Serial.print('0');
+    Serial.print(v, HEX);
+}
 
 //  ev_t is defined by LMIC to indicate the state of LoRa module
 void onEvent(ev_t ev) { 
+    Serial.print(os_getTime());
+    Serial.print(": ");
     switch(ev) {
         case EV_SCAN_TIMEOUT:
-            Serial.println("EV_SCAN_TIMEOUT");
+            Serial.println(F("EV_SCAN_TIMEOUT"));
             break;
         case EV_BEACON_FOUND:
-            Serial.println("EV_BEACON_FOUND");
+            Serial.println(F("EV_BEACON_FOUND"));
             break;
         case EV_BEACON_MISSED:
-            Serial.println("EV_BEACON_MISSED");
+            Serial.println(F("EV_BEACON_MISSED"));
             break;
         case EV_BEACON_TRACKED:
-            Serial.println("EV_BEACON_TRACKED");
+            Serial.println(F("EV_BEACON_TRACKED"));
             break;
         case EV_JOINING:
-            Serial.println("Joining LoRa network...");
+            Serial.println(F("EV_JOINING"));
             break;
         case EV_JOINED:
-            Serial.println("LoRa joined successfully!");
-            LoRa_joined = true; // set flag
+            Serial.println(F("EV_JOINED"));
+            {
+              u4_t netid = 0;
+              devaddr_t devaddr = 0;
+              u1_t nwkKey[16];
+              u1_t artKey[16];
+              LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
+              Serial.print("netid: ");
+              Serial.println(netid, DEC);
+              Serial.print("devaddr: ");
+              Serial.println(devaddr, HEX);
+              Serial.print("AppSKey: ");
+              for (size_t i=0; i<sizeof(artKey); ++i) {
+                if (i != 0)
+                  Serial.print("-");
+                printHex2(artKey[i]);
+              }
+              Serial.println("");
+              Serial.print("NwkSKey: ");
+              for (size_t i=0; i<sizeof(nwkKey); ++i) {
+                      if (i != 0)
+                              Serial.print("-");
+                      printHex2(nwkKey[i]);
+              }
+              Serial.println();
+            }
+            // Disable link check validation (automatically enabled
+            // during join, but because slow data rates change max TX
+	        // size, we don't use it in this example.
+            LMIC_setLinkCheckMode(0);
+            LoRa_joined = true;
             break;
+        /*
+        || This event is defined but not used in the code. No
+        || point in wasting codespace on it.
+        ||
+        || case EV_RFU1:
+        ||     Serial.println(F("EV_RFU1"));
+        ||     break;
+        */
         case EV_JOIN_FAILED:
-            Serial.println("EV_JOIN_FAILED - Join failed");
+            Serial.println(F("EV_JOIN_FAILED"));
             break;
         case EV_REJOIN_FAILED:
-            Serial.println("EV_REJOIN_FAILED - Rejoin failed");
+            Serial.println(F("EV_REJOIN_FAILED"));
             break;
         case EV_TXCOMPLETE:
-            Serial.println("EV_TXCOMPLETE - TX complete");
-            if (LMIC.dataLen) {  // if got downlink data
-                Serial.printf("Received downlink: RSSI %d, SNR %d\n", LMIC.rssi, LMIC.snr);
+            Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+            if (LMIC.txrxFlags & TXRX_ACK)
+                Serial.println(F("Received ack"));
+            if (LMIC.dataLen) {
+                Serial.print(F("Received "));
+                Serial.print(LMIC.dataLen);
+                Serial.println(F(" bytes of payload"));
             }
+            // schedule next round sending
+            os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
             break;
         case EV_LOST_TSYNC:
-            Serial.println("EV_LOST_TSYNC");
+            Serial.println(F("EV_LOST_TSYNC"));
             break;
         case EV_RESET:
-            Serial.println("EV_RESET");
+            Serial.println(F("EV_RESET"));
             break;
         case EV_RXCOMPLETE:
-            Serial.println("EV_RXCOMPLETE");
+            // data received in ping slot
+            Serial.println(F("EV_RXCOMPLETE"));
             break;
         case EV_LINK_DEAD:
-            Serial.println("EV_LINK_DEAD");
+            Serial.println(F("EV_LINK_DEAD"));
             break;
         case EV_LINK_ALIVE:
-            Serial.println("EV_LINK_ALIVE");
+            Serial.println(F("EV_LINK_ALIVE"));
             break;
+        /*
+        || This event is defined but not used in the code. No
+        || point in wasting codespace on it.
+        ||
+        || case EV_SCAN_FOUND:
+        ||    Serial.println(F("EV_SCAN_FOUND"));
+        ||    break;
+        */
         case EV_TXSTART:
-            Serial.println("EV_TXSTART");
+            Serial.println(F("EV_TXSTART"));
             break;
         case EV_TXCANCELED:
-            Serial.println("EV_TXCANCELED");
+            Serial.println(F("EV_TXCANCELED"));
             break;
         case EV_RXSTART:
-            // print nothing in case interupt receiving
+            /* do not print anything -- it wrecks timing */
             break;
         case EV_JOIN_TXCOMPLETE:
-            Serial.println("EV_JOIN_TXCOMPLETE: Join request sent");
+            Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
             break;
+
         default:
-            Serial.print("Unknown LoRa event: ");
+            Serial.print(F("Unknown event: "));
             Serial.println((unsigned) ev);
             break;
     }
@@ -181,28 +258,29 @@ bool LoRa_init() {
     return LoRa_joined;
 }
 
+
 void LoRa_sendData(const uint8_t* data, size_t size) {
-    unsigned long startWaitTime = millis();
-    
-    while (!LoRa_joined && millis() - startWaitTime < 30000) { // wait up to 30s
-        Serial.println("Waiting for LoRa to join network...");
-        delay(1000);
-        os_runloop_once();  // LMIC activity
-    }
-    
     if (!LoRa_joined) {
-        Serial.println("LoRa join timeout. Cannot send data.");
+        Serial.println("LoRa not joined. Cannot send data.");
         return;
     }
 
     if (size > 51) {
-        Serial.println("Error: Payload size exceeds LoRa limit (51 bytes)");
+        Serial.println("Payload too large(>51 bytes)");
+        return;
+    }
+    // Check if previous TX/RX job is still pending, OP_TXRXPEND is a flag indicating that
+    if (LMIC.opmode & OP_TXRXPEND) {
+        Serial.println("OP_TXRXPEND, not sending.");
         return;
     }
 
-    Serial.printf("Sending LoRa data: %d bytes\n", size);
-    LMIC_setTxData2(1, (uint8_t*)data, size, 1); //the last parameter: 0-->unconform 1-->conform
+    memcpy(queuedPayload, data, size);
+    payloadSize = size;
+
+    do_send(&sendjob);  // 
 }
+
 
 void LoRa_connectCheck(){
     
