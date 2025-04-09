@@ -2,6 +2,10 @@
 
 #include <globals.h>
 
+#define QUEUE_SIZE 128  // buffer size: 128 sets of 3-axis data
+int16_t sensorDataQueue[QUEUE_SIZE][3];
+volatile int queueHead = 0;
+volatile int queueTail = 0;
 /**
  * Sends the ID to the server given a packet id (useful for when pair reset is implemented)
 */
@@ -113,7 +117,7 @@ const uint16_t maxSamples = 9000 * 3;
 */
 int16_t sampleData [maxSamples];
 
-int16_t* collectData(BaseSensor& sensor) {
+int16_t* collectData_og(BaseSensor& sensor) {
     const uint32_t SAMPLE_MICROS = 1000000; // microsec for 1 sec
 
     // Collect the sample data
@@ -153,7 +157,7 @@ int16_t* collectData(BaseSensor& sensor) {
 
         client.write((char *) (&sampleData[i]), sending);
     }
-    Serial.printf("Sent data to server.\n");*/
+    Serial.printf("Sent data to server.\n"); */
     
     // send data to PC，every sample costs 2 bytes（int16_t）
     for (int i = 0; i < collectedSamples; i++) {
@@ -166,6 +170,29 @@ int16_t* collectData(BaseSensor& sensor) {
     Serial.println("Data Transmission to PC Complete.");
 
     return sampleData;
+}
+
+int16_t* collectData(BaseSensor& sensor) {
+    // 只读取一次
+    sensor.read(sampleData);  // sampleData 在标准操作中定义为全局变量
+
+    Serial.printf("Single sample: X=%d Y=%d Z=%d\n", sampleData[0], sampleData[1], sampleData[2]);
+
+    return sampleData;
+}
+
+void SensorCollectTask(BaseSensor& sensor) {
+    while (true) {
+        int nextTail = (queueTail + 1) % QUEUE_SIZE;
+
+        // if not full
+        if (nextTail != queueHead) {
+            sensor.read(sensorDataQueue[queueTail]);
+            queueTail = nextTail;
+        }
+
+        delay(500);  // sampling rate：once in 500ms
+    }
 }
 
 void goToSleep(uint32_t sleep_time) {

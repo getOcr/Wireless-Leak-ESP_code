@@ -15,8 +15,8 @@
 #include <LoRa_operation.h>
 #include <EEPROM.h>
 
-static osjob_t sendjob; //is a struct for task schedule in LMIC
-static uint8_t queuedPayload[51] = {0};  //
+osjob_t sendjob; //is a struct for task schedule in LMIC
+static uint8_t queuedPayload[53] = {0};  //
 static size_t payloadSize;
 // static bool LoRa_joined = false;
 extern bool LoRa_joined = false;
@@ -25,12 +25,18 @@ const unsigned TX_INTERVAL = 60; // (might become longer due to duty cycle limit
 
 void do_send(osjob_t* j) {
     if (LMIC.opmode & OP_TXRXPEND) {
-        Serial.println(F("OP_TXRXPEND, not sending"));
+        Serial.println(F("OP_TXRXPEND, not sending"));// Check if previous TX/RX job is still pending, OP_TXRXPEND is a flag indicating that
     } else {
         LMIC_setTxData2(1, queuedPayload, payloadSize, 0); //the last parameter: 0-->unconform 1-->conform
         Serial.println(F("LoRa Packet queued"));
     }
     // time for next round sending is set in EV_TXCOMPLETE
+}
+
+// provide an API to change the static queuedPayload and payloadSize in this file
+void preparePayload(const uint8_t* data, size_t size) {
+    memcpy(queuedPayload, data, size);
+    payloadSize = size;
 }
 
 // used to check if EUI is right before sending, in case of error fromm Flash to buf
@@ -49,9 +55,9 @@ static const u1_t PROGMEM DEVEUI[8] = { 0xC8, 0x41, 0x00, 0xD8, 0x7E, 0xD5, 0xB3
 //static const u1_t PROGMEM DEVEUI[8] = { 0x1E, 0x43, 0x00, 0xD8, 0x7E, 0xD5, 0xB3, 0x70 }; // for 1.0.4dev which will introduce the problem of "DevNounce is too small"
 static const u1_t PROGMEM APPKEY[16] = { 0x25, 0x0D, 0x30, 0x53, 0xAD, 0x8F, 0xE4, 0x6C, 0x66, 0x1E, 0x3A, 0x4C, 0xB0, 0xC7, 0x1C, 0x57 };  // 
 
-void os_getArtEui (u1_t* buf) { memcpy(buf, APPEUI, 8); debugEUI("AppEUI", buf);}
-void os_getDevEui (u1_t* buf) { memcpy(buf, DEVEUI, 8); debugEUI("DevEUI", buf);}
-void os_getDevKey (u1_t* buf) { memcpy(buf, APPKEY, 16); }
+void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8); debugEUI("AppEUI", buf);}
+void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8); debugEUI("DevEUI", buf);}
+void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16); }
 
 //  LoRa frequency（915 MHz for US，868 MHz for EU）
 const lmic_pinmap lmic_pins = {
@@ -196,7 +202,7 @@ void onEvent(ev_t ev) {
     }
 }
 
-bool LoRa_init() {
+void LoRa_init() {
     Serial.println("Initializing LoRa...");
     os_init();
     Serial.println("os_init() finished");
@@ -210,7 +216,7 @@ bool LoRa_init() {
     //  8 channels starting from 903MHz for higher rate: DR4 with 500kHz BW || DR5~DR6 with LRFHSS 1.523MHz BW.
     // For LoRa downlink channel(from LoRa gateway to end device)：8 channels in total starting from 923.3MHz.
     // For LMIC_selectSubBand(): input is ranging in [0,8), which separates the 72 channels into 8 sub-bands.
-    LMIC_selectSubBand(0);  //  US915:[0,8)
+    //LMIC_selectSubBand(0);  //  US915:[0,8)
 
     // debug for devEui and end device MAC
     /* uint8_t devEui[8];
@@ -243,42 +249,32 @@ bool LoRa_init() {
 
     //  Set data rate
     //LMIC_setDrTxpow(US915_DR_SF8C, 14); // DR4: 222 bytes  DR4:SF8@500kHz 
-    LMIC_setDrTxpow(US915_DR_SF10, 14); // DR0
-
+    //LMIC_setDrTxpow(US915_DR_SF10, 14); // DR0
+    LMIC_setDrTxpow(US915_DR_SF9, 14); // DR1
     //  Start OTAA
-    LMIC_startJoining();
+    //LMIC_startJoining(); // comment it because do_send automatically starts OTAA too
 
-    while (!LoRa_joined) {
+    /*while (!LoRa_joined) {
         os_runloop_once();  
         Serial.println("Trying to join LoRa network...");
         delay(2000);  // avoid polling too fast
-    }
+    }*/
 
-    Serial.println("LoRa successfully joined!");
-    return LoRa_joined;
+    //Serial.println("LoRa successfully joined!");
+    //return LoRa_joined;
 }
 
 
 void LoRa_sendData(const uint8_t* data, size_t size) {
-    if (!LoRa_joined) {
-        Serial.println("LoRa not joined. Cannot send data.");
-        return;
-    }
-
     if (size > 51) {
-        Serial.println("Payload too large(>51 bytes)");
-        return;
-    }
-    // Check if previous TX/RX job is still pending, OP_TXRXPEND is a flag indicating that
-    if (LMIC.opmode & OP_TXRXPEND) {
-        Serial.println("OP_TXRXPEND, not sending.");
+        Serial.println("Payload too large(>53 bytes)");
         return;
     }
 
-    memcpy(queuedPayload, data, size);
-    payloadSize = size;
+    preparePayload(data, size);
 
-    do_send(&sendjob);  // 
+    do_send(&sendjob);  // automatically start OTAA join
+    Serial.println("Connected and Test data sent.");
 }
 
 

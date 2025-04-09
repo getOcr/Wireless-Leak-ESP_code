@@ -3,17 +3,18 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-#define SPI_CS 5
+#define Sensor_CS 21
+
 /**
  * Reads data from SPI.
 */
 void spiRead(uint8_t address, uint8_t* data, uint8_t len) {
-    digitalWrite(SPI_CS, LOW);
+    digitalWrite(Sensor_CS, LOW);
     SPI.transfer(address | 0b10000000);
     for (int i = 0; i < len; i ++) {
         data[i] = SPI.transfer(0x00);
     }
-    digitalWrite(SPI_CS, HIGH);
+    digitalWrite(Sensor_CS, HIGH);
 }
 
 /**
@@ -29,12 +30,12 @@ uint8_t spiRead(uint8_t address) {
  * Writes data to SPI.
 */
 void spiWrite(uint8_t address, uint8_t* data, uint8_t len) {
-    digitalWrite(SPI_CS, LOW);
+    digitalWrite(Sensor_CS, LOW);
     SPI.transfer(address | 0b00000000);
     for (int i = 0; i < len; i ++) {
         SPI.transfer(data[i]);
     }
-    digitalWrite(SPI_CS, HIGH);
+    digitalWrite(Sensor_CS, HIGH);
 }
 
 /**
@@ -62,7 +63,7 @@ LIS3DHH::LIS3DHH() {
 }
 
 void LIS3DHH::initialize() {
-    pinMode(SPI_CS, OUTPUT);
+    pinMode(Sensor_CS, OUTPUT);
     SPI.begin();
 
     // Read WHO_AM_I to ensure correct device
@@ -110,10 +111,11 @@ void LIS3DHH::read(int16_t* storage) {
 
     spiRead(X_LOW, data, 6); 
 
-    storage[0] = (int16_t) ((((uint16_t) data[1]) << 8) | data[0]); // x
-    storage[1] = (int16_t) ((((uint16_t) data[3]) << 8) | data[2]); // y
-    storage[2] = (int16_t) ((((uint16_t) data[5]) << 8) | data[4]); // z
+    storage[0] = (int16_t) ((((uint16_t) data[1]) << 8) | data[0]); // x 2bytes
+    storage[1] = (int16_t) ((((uint16_t) data[3]) << 8) | data[2]); // y 2bytes
+    storage[2] = (int16_t) ((((uint16_t) data[5]) << 8) | data[4]); // z 2bytes
 }
+
 
 // Wrapper class for the mma sensor
 MMA8451::MMA8451(): mma() {

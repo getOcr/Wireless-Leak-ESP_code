@@ -16,5 +16,6 @@ void synchronize();
  * Collects data from the attached sensor.
 */
 int16_t* collectData(BaseSensor& sensor);
+void SensorCollectTask(BaseSensor& sensor);
 
 void goToSleep(uint32_t sleep_time);
