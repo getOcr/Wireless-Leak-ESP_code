@@ -10,6 +10,17 @@
 LIS3DHH sensor;
 //extern bool LoRa_joined;
 
+#define QUEUE_SIZE 128
+int16_t sensorDataQueue[QUEUE_SIZE][3];
+int queueHead = 0;  // send
+int queueTail = 0;  // collect
+
+// time control
+unsigned long lastSampleTime = 0;
+unsigned long lastSendTime = 0;
+const unsigned long sampleInterval = 1000;     // collect every 1s
+const unsigned long sendInterval = 15000;    // send every 15s
+
 extern "C" void printSerial(const char* msg) {
     Serial.println(msg);
 }
@@ -32,7 +43,11 @@ void setup() {
     sensor.initialize();
     Serial.println("sensor initialized");
 
-    // Collect the data
+    // LoRa initialize
+    LoRa_init();
+    Serial.println("loRa initialized");
+
+    /*// Collect the data
     int16_t* LoRadata = collectData(sensor);
     Serial.println("data collected");
     uint8_t data[6] = {
@@ -44,12 +59,7 @@ void setup() {
     for (int i = 0; i < 6; i++) {
         Serial.printf("%02X ", data[i]);  // Print as two-digit hexadecimal
     }
-    Serial.println();  
-    
-    // LoRa
-    //LoRa_joined = LoRa_init();
-    LoRa_init();
-    Serial.println("loRa initialized");
+    Serial.println();*/  
 
     // LoRa connect check
     //LoRa_connectCheck();
@@ -64,7 +74,7 @@ void setup() {
 
     // Test
     //if(LoRa_joined){
-    LoRa_sendData(data, sizeof(data));
+    //LoRa_sendData(data, sizeof(data));
     //} 
 }
 
@@ -79,4 +89,46 @@ void loop() {
     //LoRa_sendData(test_data, sizeof(test_data));
 
     //goToSleep(30); // deep sleep for 30s
+
+    unsigned long now = millis();
+
+    // sensor collecting
+    if (now - lastSampleTime >= sampleInterval) {
+        lastSampleTime = now;
+
+        int nextTail = (queueTail + 1) % QUEUE_SIZE;
+        if (nextTail != queueHead) {  // queue is not full
+            sensor.read(sensorDataQueue[queueTail]);
+
+            // debug
+            Serial.printf("Sampled: X=%d Y=%d Z=%d\n",
+                sensorDataQueue[queueTail][0],
+                sensorDataQueue[queueTail][1],
+                sensorDataQueue[queueTail][2]);
+
+            queueTail = nextTail;
+        } else {
+            Serial.println("Sensor queue full. Skipping sample.");
+        }
+    }
+
+    // LoRa sending
+    if (now - lastSendTime >= sendInterval) {
+        lastSendTime = now;
+
+        if (queueHead != queueTail && !(LMIC.opmode & OP_TXRXPEND)) {
+            uint8_t data[6] = {
+                sensorDataQueue[queueHead][0] >> 8, sensorDataQueue[queueHead][0] & 0xFF,
+                sensorDataQueue[queueHead][1] >> 8, sensorDataQueue[queueHead][1] & 0xFF,
+                sensorDataQueue[queueHead][2] >> 8, sensorDataQueue[queueHead][2] & 0xFF,
+            };
+
+            LoRa_sendData(data, sizeof(data));
+            Serial.println("LoRa Packet queued (polling)");
+
+            queueHead = (queueHead + 1) % QUEUE_SIZE;
+        } else {
+            Serial.println("LoRa busy or no data to send.");
+        }
+    }
 }
