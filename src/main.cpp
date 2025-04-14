@@ -11,9 +11,10 @@ LIS3DHH sensor;
 //extern bool LoRa_joined;
 
 #define QUEUE_SIZE 128
-int16_t sensorDataQueue[QUEUE_SIZE][3];
+int16_t sensorDataQueue[QUEUE_SIZE][4];
 int queueHead = 0;  // send
 int queueTail = 0;  // collect
+static uint16_t packetCounter = 1;
 
 // time control
 unsigned long lastSampleTime = 0;
@@ -98,14 +99,15 @@ void loop() {
 
         int nextTail = (queueTail + 1) % QUEUE_SIZE;
         if (nextTail != queueHead) {  // queue is not full
-            sensor.read(sensorDataQueue[queueTail]);
-
+            sensor.read(&sensorDataQueue[queueTail][1]);
+            sensorDataQueue[queueTail][0] = packetCounter; 
             // debug
-            Serial.printf("Sampled: X=%d Y=%d Z=%d\n",
+            Serial.printf("Sampled: #%d X=%d Y=%d Z=%d\n",
                 sensorDataQueue[queueTail][0],
                 sensorDataQueue[queueTail][1],
-                sensorDataQueue[queueTail][2]);
-
+                sensorDataQueue[queueTail][2],
+                sensorDataQueue[queueTail][3]);
+            packetCounter++;
             queueTail = nextTail;
         } else {
             Serial.println("Sensor queue full. Skipping sample.");
@@ -117,14 +119,22 @@ void loop() {
         lastSendTime = now;
 
         if (queueHead != queueTail && !(LMIC.opmode & OP_TXRXPEND)) {
-            uint8_t data[6] = {
-                sensorDataQueue[queueHead][0] >> 8, sensorDataQueue[queueHead][0] & 0xFF,
+
+            uint8_t data[8] = {
+                (uint8_t)(sensorDataQueue[queueHead][0] >> 8), (uint8_t)(sensorDataQueue[queueHead][0] & 0xFF),
                 sensorDataQueue[queueHead][1] >> 8, sensorDataQueue[queueHead][1] & 0xFF,
                 sensorDataQueue[queueHead][2] >> 8, sensorDataQueue[queueHead][2] & 0xFF,
+                sensorDataQueue[queueHead][3] >> 8, sensorDataQueue[queueHead][3] & 0xFF,
             };
 
             LoRa_sendData(data, sizeof(data));
-            Serial.println("LoRa Packet queued (polling)");
+
+            Serial.printf("LoRa queued: #%d X=%d Y=%d Z=%d\n",
+                sensorDataQueue[queueHead][0],
+                sensorDataQueue[queueHead][1],
+                sensorDataQueue[queueHead][2],
+                sensorDataQueue[queueHead][3]);
+            Serial.println();
 
             queueHead = (queueHead + 1) % QUEUE_SIZE;
         } else {

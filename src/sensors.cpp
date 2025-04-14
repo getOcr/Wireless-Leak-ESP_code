@@ -64,7 +64,7 @@ LIS3DHH::LIS3DHH() {
 
 void LIS3DHH::initialize() {
     pinMode(Sensor_CS, OUTPUT);
-    SPI.begin();
+    //SPI.begin();
 
     // Read WHO_AM_I to ensure correct device
     //checkWhoAmI();

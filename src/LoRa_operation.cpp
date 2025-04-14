@@ -24,11 +24,12 @@ extern bool LoRa_joined = false;
 const unsigned TX_INTERVAL = 60; // (might become longer due to duty cycle limitations).
 
 void do_send(osjob_t* j) {
+    Serial.println(F("do_send() start"));
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));// Check if previous TX/RX job is still pending, OP_TXRXPEND is a flag indicating that
     } else {
         LMIC_setTxData2(1, queuedPayload, payloadSize, 0); //the last parameter: 0-->unconform 1-->conform
-        Serial.println(F("LoRa Packet queued"));
+        //Serial.println(F("LoRa Packet queued"));
     }
     // time for next round sending is set in EV_TXCOMPLETE
 }
@@ -131,6 +132,7 @@ void onEvent(ev_t ev) {
 	        // size, we don't use it in this example.
             LMIC_setLinkCheckMode(0);
             LoRa_joined = true;
+            if(LoRa_joined) {Serial.println("LoRa_Joined = 1");}
             break;
         /*
         || This event is defined but not used in the code. No
@@ -274,7 +276,6 @@ void LoRa_sendData(const uint8_t* data, size_t size) {
     preparePayload(data, size);
 
     do_send(&sendjob);  // automatically start OTAA join
-    Serial.println("Connected and Test data sent.");
 }
 
 
