@@ -1,0 +1,75 @@
+#include "BLE_operation.h"
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+#define SERVICE_UUID        "12345678-1234-1234-1234-1234567890ab"
+#define CHARACTERISTIC_UUID "abcdefab-1234-5678-90ab-abcdefabcdef"
+
+BLECharacteristic* pCharacteristic;
+bool deviceConnected = false;
+
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+    Serial.println("Client connected");
+  }
+
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+    Serial.println("Client disconnected");
+  }
+};
+
+void BLE_init() {
+  BLEDevice::init("ESP32_BLE_Sensor");
+  BLEServer* pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService* pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+      CHARACTERISTIC_UUID,
+      BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pCharacteristic->addDescriptor(new BLE2902());
+  pService->start();
+  pServer->getAdvertising()->start();
+
+  Serial.println("BLE service started and advertising");
+}
+
+void BLE_sendDummyData() {
+  const int totalSamples = 25000;
+  const int axes = 3;
+  int16_t dummyData[totalSamples * axes];
+
+  for (int i = 0; i < totalSamples * axes; i++) {
+    dummyData[i] = i % 1000;  //
+  }
+
+  // 244 bytes（122 int16_t）
+  const int chunkSize = 122;
+  uint8_t buffer[chunkSize * 2];
+
+  while (!deviceConnected) {
+    Serial.println("Waiting for BLE client...");
+    delay(1000);
+  }
+
+  for (int i = 0; i < totalSamples * axes; i += chunkSize) {
+    int remaining = totalSamples * axes - i;
+    int sendCount = remaining >= chunkSize ? chunkSize : remaining;
+
+    for (int j = 0; j < sendCount; j++) {
+      buffer[2 * j]     = dummyData[i + j] >> 8;
+      buffer[2 * j + 1] = dummyData[i + j] & 0xFF;
+    }
+
+    pCharacteristic->setValue(buffer, sendCount * 2);
+    pCharacteristic->notify();
+    delay(10); 
+  }
+
+  Serial.println("All dummy data sent!");
+}

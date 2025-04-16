@@ -218,7 +218,7 @@ void LoRa_init() {
     //  8 channels starting from 903MHz for higher rate: DR4 with 500kHz BW || DR5~DR6 with LRFHSS 1.523MHz BW.
     // For LoRa downlink channel(from LoRa gateway to end device)：8 channels in total starting from 923.3MHz.
     // For LMIC_selectSubBand(): input is ranging in [0,8), which separates the 72 channels into 8 sub-bands.
-    //LMIC_selectSubBand(0);  //  US915:[0,8)
+    LMIC_selectSubBand(1);  //  US915:[0,8)
 
     // debug for devEui and end device MAC
     /* uint8_t devEui[8];
