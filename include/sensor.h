@@ -59,6 +59,17 @@ public:
 
 };
 
+// LIS3DH
+class LIS3DH : public BaseSensor {
+public:
+    LIS3DH();
+    void initialize();
+    void read(int16_t* storage);
+    uint8_t axes() { return 3; };
+
+};
+
+
 /**
  * Wrapper class for the MMA8451 sensor from Adafruit.
 */

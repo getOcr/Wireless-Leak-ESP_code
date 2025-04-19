@@ -12,7 +12,7 @@
 //  End device uses AppKey and AppNonce to derive NwkSKey and AppSKey.
 
 
-#include <LoRa_operation.h>
+#include <LoRaWAN_operation.h>
 #include <EEPROM.h>
 
 osjob_t sendjob; //is a struct for task schedule in LMIC

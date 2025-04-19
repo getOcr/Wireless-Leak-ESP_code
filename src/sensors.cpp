@@ -9,8 +9,8 @@
  * Reads data from SPI.
 */
 void spiRead(uint8_t address, uint8_t* data, uint8_t len) {
-    digitalWrite(Sensor_CS, LOW);
-    SPI.transfer(address | 0b10000000);
+    digitalWrite(Sensor_CS, LOW); // trigger SPI for sensor
+    SPI.transfer(address | 0b10000000); // set read mode (bit7 =1
     for (int i = 0; i < len; i ++) {
         data[i] = SPI.transfer(0x00);
     }
@@ -45,24 +45,34 @@ void spiWrite(uint8_t address, uint8_t data) {
     spiWrite(address, &data, 1);
 }
 
-/**
- * LIS3DHH Registers.
-*/
+// checkWhoAmI() is used for debug
+void checkWhoAmI() {
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));  // try SPI_MODE3
+    digitalWrite(5, LOW);  // make sure cs low
+    SPI.transfer(0x8F);  // 0x0F | 0x80 (read WHO_AM_I)
+    uint8_t whoami = SPI.transfer(0x00);  // 
+    digitalWrite(5, HIGH);
+    SPI.endTransaction();
+
+    Serial.printf("handy WHO_AM_I register: 0x%02X\n", whoami);
+}
+
+// wrapper class for LIS3DH sensor
 #define WHO_AM_I 0x0F
 #define CTRL_REG1 0x20
 #define STATUS 0x27
-#define X_LOW 0x28
+#define LIS3DH_REG_OUT_X_L 0x28
 #define LIS3DH_REG_OUT_X_H 0x29
 #define LIS3DH_REG_OUT_Y_L 0x2A
 #define LIS3DH_REG_OUT_Y_H 0x2B
 #define LIS3DH_REG_OUT_Z_L 0x2C
 #define LIS3DH_REG_OUT_Z_H 0x2D
 
-LIS3DHH::LIS3DHH() {
+LIS3DH::LIS3DH() {
     
 }
 
-void LIS3DHH::initialize() {
+void LIS3DH::initialize() {
     pinMode(Sensor_CS, OUTPUT);
     //SPI.begin();
 
@@ -94,26 +104,16 @@ void LIS3DHH::initialize() {
     Serial.printf("LIS3DHH sucessfully initalized.\n");
 }
 
-// checkWhoAmI() is used for debug
-void checkWhoAmI() {
-    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));  // try SPI_MODE3
-    digitalWrite(5, LOW);  // make sure cs low
-    SPI.transfer(0x8F);  // 0x0F | 0x80 (read WHO_AM_I)
-    uint8_t whoami = SPI.transfer(0x00);  // 
-    digitalWrite(5, HIGH);
-    SPI.endTransaction();
+void LIS3DH::read(int16_t* storage) {
+    uint8_t buffer[6] = { 0 }; // 6 8bits data: xl xh yl yh zl zh
 
-    Serial.printf("handy WHO_AM_I register: 0x%02X\n", whoami);
-}
+    //  To perform a multiple-byte read or write, bit 6 of the sub-address field must be set to 1.
+        //  0xC0 = 0x80 (read) + 0x40 (auto-increment)
+    spiRead(LIS3DH_REG_OUT_X_L | 0xC0, buffer, 6); 
 
-void LIS3DHH::read(int16_t* storage) {
-    uint8_t data[6] = { 0 }; // 6 8bits data: xl xh yl yh zl zh
-
-    spiRead(X_LOW, data, 6); 
-
-    storage[0] = (int16_t) ((((uint16_t) data[1]) << 8) | data[0]); // x 2bytes
-    storage[1] = (int16_t) ((((uint16_t) data[3]) << 8) | data[2]); // y 2bytes
-    storage[2] = (int16_t) ((((uint16_t) data[5]) << 8) | data[4]); // z 2bytes
+    storage[0] = (int16_t)((buffer[1] << 8) | buffer[0]); // X, 2Bytes
+    storage[1] = (int16_t)((buffer[3] << 8) | buffer[2]); // Y, 2Bytes
+    storage[2] = (int16_t)((buffer[5] << 8) | buffer[4]); // Z, 2Bytes
 }
 
 

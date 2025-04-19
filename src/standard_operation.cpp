@@ -109,13 +109,10 @@ void synchronize() {
     delayMicroseconds(delayTime);
 }
 
-
+// Statically allocated sample data. This makes sure we dont have a stack overflow.
 const uint16_t maxSamples = 9000 * 3;
-/**
- * Statically allocated sample data. This makes sure we dont have a stack overflow.
- * Stores the X, Y[, Z] channels repeatedly.
-*/
 int16_t sampleData [maxSamples];
+int sampleFrequency = 5000;
 
 int16_t* collectData_og(BaseSensor& sensor) {
     const uint32_t SAMPLE_MICROS = 1000000; // microsec for 1 sec
@@ -172,11 +169,41 @@ int16_t* collectData_og(BaseSensor& sensor) {
     return sampleData;
 }
 
-int16_t* collectData(BaseSensor& sensor) {
-    // 只读取一次
-    sensor.read(sampleData);  // sampleData 在标准操作中定义为全局变量
+int16_t* collectDataOnce(BaseSensor& sensor) {
+    // raad once
+    sensor.read(sampleData);
 
     Serial.printf("Single sample: X=%d Y=%d Z=%d\n", sampleData[0], sampleData[1], sampleData[2]);
+
+    return sampleData;
+}
+
+int16_t* collectData(BaseSensor& sensor, int& outGroupCount) {
+    const uint32_t SAMPLE_INTERVAL_US = 1000000 / sampleFrequency;         // 5kHz = sample every 200 micro second
+    const uint32_t DURATION_US = 1000000;            // 2 second = 2,000,000 micro second
+
+    uint32_t startTime = micros();
+    uint32_t nextSampleTime = startTime;
+
+    uint16_t collected = 0;
+    uint16_t groupIndex = 0;
+    while (micros() - startTime < DURATION_US) {
+        if (micros() >= nextSampleTime) {
+            if (collected + 4 > maxSamples) {
+                Serial.println("sample buffer isfull");
+                break;
+            }
+
+            sampleData[collected + 0] = groupIndex;
+            sensor.read(&sampleData[collected + 1]);
+            collected += 4;
+            groupIndex++;
+            nextSampleTime += SAMPLE_INTERVAL_US;
+        }
+    }
+    outGroupCount = groupIndex;
+    Serial.printf("%ds collection finished, %d data in all,  %.1f sets of 3-axis samples\n", 
+                  DURATION_US/1000000, collected, collected / 3.0);
 
     return sampleData;
 }

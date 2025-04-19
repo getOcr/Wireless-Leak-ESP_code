@@ -1,150 +1,138 @@
+// rf95_client.pde
+// -*- mode: C++ -*-
+// Example sketch showing how to create a simple messageing client
+// with the RH_RF95 class. RH_RF95 class does not provide for addressing or
+// reliability, so you should only use RH_RF95 if you do not need the higher
+// level messaging abilities.
+// It is designed to work with the other example rf95_server
+// Tested with Anarduino MiniWirelessLoRa, Rocket Scream Mini Ultra Pro with
+// the RFM95W, Adafruit Feather M0 with RFM95
+
+#include <RH_RF95.h>
 #include <Arduino.h>
 #include <globals.h>
-#include <startup.h>
 #include <standard_operation.h>
-#include <reset_id.h>
 #include <sensor.h>
 #include "esp_sleep.h"
-#include <LoRa_operation.h>
-#include <BLE_operation.h>
+#include <LoRaWAN_operation.h>
+//#include <BLE_operation.h>
 
-// LIS3DHH sensor;
-// //extern bool LoRa_joined;
+// for feather esp32 with RFM95
+#define RFM95_CS 33
+#define RFM95_INT 13
+#define RFM95_RST 32 
 
-// #define QUEUE_SIZE 128
-// int16_t sensorDataQueue[QUEUE_SIZE][4];
-// int queueHead = 0;  // send
-// int queueTail = 0;  // collect
-// static uint16_t packetCounter = 1;
+// Singleton instance of the radio driver
+//RH_RF95 rf95;
+RHHardwareSPI mySPI;
+RH_RF95 rf95(RFM95_CS, RFM95_INT, mySPI); 
 
-// // time control
-// unsigned long lastSampleTime = 0;
-// unsigned long lastSendTime = 0;
-// const unsigned long sampleInterval = 10000;     // collect every 10s
-// const unsigned long sendInterval = 60000;    // send every 120s
+LIS3DH sensor;
 
-// extern "C" void printSerial(const char* msg) {
-//     Serial.println(msg);
-// }
+void setup() 
+{
+  Serial.begin(115200);
+  while (!Serial) ; // Wait for serial port to be available
+  SPI.begin(5, 19, 18);  // SCK, MISO, MOSI, for both sensor and LoRa module
 
-void setup() {
-    // Initialize Serial
-	Serial.begin(115200);
-    while (!Serial);
+  // disable WiFi in case NVS
+  WiFi.disconnect(true);  
+  delay(100);
+  WiFi.mode(WIFI_OFF); 
+  Serial.println("WiFi disabled!");
 
-    // BLE
-    BLE_init();
-    delay(2000);  // wait for connection
-    BLE_sendDummyData();
+  // sensor initialize
+  sensor.initialize();
+  Serial.println("sensor initialized");
 
-    // // disable WiFi in case NVS
-    // WiFi.disconnect(true);  
-    // delay(100);
-    // WiFi.mode(WIFI_OFF); 
-    // Serial.println("WiFi disabled!");
+  // LoRa p2p
+  if (!rf95.init())
+  Serial.println("init failed");
+  // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
+  
+  // You can change the modulation parameters with eg
+  // rf95.setModemConfig(RH_RF95::Bw500Cr45Sf128);
+  
+  // The default transmitter power is 13dBm, using PA_BOOST.
+  // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then 
+  // you can set transmitter powers from 2 to 20 dBm:
+  // rf95.setTxPower(20, false);
 
-    // SPI.begin(5, 19, 18);
-    // //SPI.begin(18, 19, 23, 5); // SCK, MISO, MOSI, CS (NSS)
+  // Collect the data
+  int groupCount = 0;
+  int16_t* sampleData = collectData(sensor, groupCount);
+    /*int totalAxes = 3;
+    int totalSamples = 10;
 
-    // // sensor initialize
-    // sensor.initialize();
-    // Serial.println("sensor initialized");
+    for (int i = 0; i < totalSamples; i++) {
+        int x = data[i * totalAxes + 0];
+        int y = data[i * totalAxes + 1];
+        int z = data[i * totalAxes + 2];
 
-    // // LoRa initialize
-    // LoRa_init();
-    // Serial.println("loRa initialized");
+        Serial.printf("Sample %d: X=%d Y=%d Z=%d\n", i, x, y, z);
+    }*/
 
-    /*// Collect the data
-    int16_t* LoRadata = collectData(sensor);
-    Serial.println("data collected");
-    uint8_t data[6] = {
-        LoRadata[0] >> 8, LoRadata[0] & 0xFF,
-        LoRadata[1] >> 8, LoRadata[1] & 0xFF,
-        LoRadata[2] >> 8, LoRadata[2] & 0xFF
-    };
-    Serial.print("Data bytes: ");
-    for (int i = 0; i < 6; i++) {
-        Serial.printf("%02X ", data[i]);  // Print as two-digit hexadecimal
+  Serial.println("Start sending to rf95_server");
+  // Send a message to rf95_server
+  const int GROUP_SIZE = 4;               // [ID, X, Y, Z]
+  const int GROUP_BYTE_SIZE = 8;          // 4 × int16_t = 8
+  const int GROUPS_PER_PACKET = 30;       // 30 sets per sending
+  const int PACKET_SIZE = 1 + GROUPS_PER_PACKET * GROUP_BYTE_SIZE;
+
+  uint8_t packet[PACKET_SIZE];
+  uint8_t packetId = 0;
+
+  for (int i = 0; i < groupCount; i += GROUPS_PER_PACKET) {
+    memset(packet, 0, PACKET_SIZE); 
+
+    packet[0] = packetId;  // package ID
+    int groupThisPacket = min(GROUPS_PER_PACKET, groupCount - i); // consider the last set.
+
+    for (int j = 0; j < groupThisPacket; j++) {
+        int16_t* groupPtr = &sampleData[(i + j) * GROUP_SIZE];
+        int offset = j * GROUP_BYTE_SIZE;
+
+        for (int k = 0; k < GROUP_SIZE; k++) {
+            packet[1 + offset + 2 * k]     = (groupPtr[k] >> 8) & 0xFF;
+            packet[1 + offset + 2 * k + 1] = groupPtr[k] & 0xFF;
+        }
     }
-    Serial.println();*/  
 
-    // LoRa connect check
-    //LoRa_connectCheck();
-    
-    // create queue
-    //sensorDataQueue = xQueueCreate(QUEUE_SIZE, sizeof(int16_t) * 3);
+    rf95.send(packet, 1 + groupThisPacket * GROUP_BYTE_SIZE);
+    rf95.waitPacketSent();
+    Serial.printf("Sent %d groups (%d bytes)\n", groupThisPacket, groupThisPacket * GROUP_BYTE_SIZE);
 
-    // create tasks
-    //xTaskCreatePinnedToCore(sensor.SensorTask, "SensorTask", 4096, NULL, 2, NULL, 1);
-    //xTaskCreatePinnedToCore(LoRaTask, "LoRaTask", 4096, NULL, 1, NULL, 1);
-    //xTaskCreatePinnedToCore(SleepTask, "SleepTask", 2048, NULL, 0, NULL, 1);
+    // Now wait for a reply
+    uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+    uint8_t len = sizeof(buf);
 
-    // Test
-    //if(LoRa_joined){
-    //LoRa_sendData(data, sizeof(data));
-    //} 
+    if (rf95.waitAvailableTimeout(3000))
+    { 
+      // Should be a reply message for us now   
+      if (rf95.recv(buf, &len))
+      {
+        Serial.print("got reply: ");
+        Serial.println((char*)buf);
+        Serial.print("RSSI: ");
+        Serial.println(rf95.lastRssi(), DEC);    
+      }
+      else
+      {
+        Serial.println("recv failed");
+      }
+    }
+    else
+    {
+      Serial.println("No reply, is rf95_server running?");
+    }
+    delay(400);
+  }
+  Serial.println("sending ended");
 }
 
-void loop() {
-    // os_runloop_once();
-
-    // //uint8_t test_data[4] = { 0x12, 0x34, 0x56, 0x78 };
-    // //LoRa_sendData(test_data, sizeof(test_data));
-
-    // //Serial.println("Test data sent. Sleeping for 30 seconds...");
-    
-    // //LoRa_sendData(test_data, sizeof(test_data));
-
-    // //goToSleep(30); // deep sleep for 30s
-
-    // unsigned long now = millis();
-
-    // // sensor collecting
-    // if (now - lastSampleTime >= sampleInterval) {
-    //     lastSampleTime = now;
-
-    //     int nextTail = (queueTail + 1) % QUEUE_SIZE;
-    //     if (nextTail != queueHead) {  // queue is not full
-    //         sensor.read(&sensorDataQueue[queueTail][1]);
-    //         sensorDataQueue[queueTail][0] = packetCounter; 
-    //         // debug
-    //         Serial.printf("Sampled: #%d X=%d Y=%d Z=%d\n",
-    //             sensorDataQueue[queueTail][0],
-    //             sensorDataQueue[queueTail][1],
-    //             sensorDataQueue[queueTail][2],
-    //             sensorDataQueue[queueTail][3]);
-    //         packetCounter++;
-    //         queueTail = nextTail;
-    //     } else {
-    //         Serial.println("Sensor queue full. Skipping sample.");
-    //     }
-    // }
-
-    // // LoRa sending
-    // if (now - lastSendTime >= sendInterval) {
-    //     lastSendTime = now;
-
-    //     if (queueHead != queueTail && !(LMIC.opmode & OP_TXRXPEND)) {
-
-    //         uint8_t data[8] = {
-    //             (uint8_t)(sensorDataQueue[queueHead][0] >> 8), (uint8_t)(sensorDataQueue[queueHead][0] & 0xFF),
-    //             sensorDataQueue[queueHead][1] >> 8, sensorDataQueue[queueHead][1] & 0xFF,
-    //             sensorDataQueue[queueHead][2] >> 8, sensorDataQueue[queueHead][2] & 0xFF,
-    //             sensorDataQueue[queueHead][3] >> 8, sensorDataQueue[queueHead][3] & 0xFF,
-    //         };
-
-    //         LoRa_sendData(data, sizeof(data));
-
-    //         Serial.printf("LoRa queued: #%d X=%d Y=%d Z=%d\n",
-    //             sensorDataQueue[queueHead][0],
-    //             sensorDataQueue[queueHead][1],
-    //             sensorDataQueue[queueHead][2],
-    //             sensorDataQueue[queueHead][3]);
-    //         Serial.println();
-
-    //         queueHead = (queueHead + 1) % QUEUE_SIZE;
-    //     } else {
-    //         Serial.println("LoRa busy or no data to send.");
-    //     }
-    // }
+void loop()
+{
+  
 }
+
+

@@ -7,7 +7,7 @@
 #define SERVICE_UUID        "12345678-1234-1234-1234-1234567890ab"
 #define CHARACTERISTIC_UUID "abcdefab-1234-5678-90ab-abcdefabcdef"
 
-BLECharacteristic* pCharacteristic;
+BLECharacteristic* pCharacteristic = nullptr;
 bool deviceConnected = false;
 
 class MyServerCallbacks : public BLEServerCallbacks {
@@ -22,10 +22,15 @@ class MyServerCallbacks : public BLEServerCallbacks {
   }
 };
 
+static MyServerCallbacks* serverCallbacks = nullptr;
+
 void BLE_init() {
   BLEDevice::init("ESP32_BLE_Sensor");
+  BLEDevice::setMTU(247);  // 支持更大 notify 长度
+
   BLEServer* pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  serverCallbacks = new MyServerCallbacks();
+  pServer->setCallbacks(serverCallbacks);
 
   BLEService* pService = pServer->createService(SERVICE_UUID);
   pCharacteristic = pService->createCharacteristic(
@@ -45,11 +50,10 @@ void BLE_sendDummyData() {
   int16_t dummyData[totalSamples * axes];
 
   for (int i = 0; i < totalSamples * axes; i++) {
-    dummyData[i] = i % 1000;  //
+    dummyData[i] = i % 1000;
   }
 
-  // 244 bytes（122 int16_t）
-  const int chunkSize = 122;
+  const int chunkSize = 122; // 244 bytes
   uint8_t buffer[chunkSize * 2];
 
   while (!deviceConnected) {
@@ -58,6 +62,11 @@ void BLE_sendDummyData() {
   }
 
   for (int i = 0; i < totalSamples * axes; i += chunkSize) {
+    if (!deviceConnected) {
+      Serial.println("BLE disconnected during transfer, aborting.");
+      break;
+    }
+
     int remaining = totalSamples * axes - i;
     int sendCount = remaining >= chunkSize ? chunkSize : remaining;
 
@@ -68,7 +77,7 @@ void BLE_sendDummyData() {
 
     pCharacteristic->setValue(buffer, sendCount * 2);
     pCharacteristic->notify();
-    delay(10); 
+    delay(30); // 稍微大一点防止 buffer 堆积崩溃
   }
 
   Serial.println("All dummy data sent!");
