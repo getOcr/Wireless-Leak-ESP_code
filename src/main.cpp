@@ -46,17 +46,23 @@ void setup()
   Serial.println("sensor initialized");
 
   // LoRa p2p
-  if (!rf95.init())
-  Serial.println("init failed");
+  if (!rf95.init()){
+    Serial.println("init() failed");
+  }else{
+    Serial.println("init() success");
+  }
+  
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
-  
+  rf95.setFrequency(915.0);
   // You can change the modulation parameters with eg
-  // rf95.setModemConfig(RH_RF95::Bw500Cr45Sf128);
-  
+  //rf95.setModemConfig(RH_RF95::Bw500Cr45Sf128);
+  rf95.setModemConfig(RH_RF95::Bw125Cr45Sf2048);
+  //rf95.spiWrite(0x26, 0x08);
+  //rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);
   // The default transmitter power is 13dBm, using PA_BOOST.
   // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then 
   // you can set transmitter powers from 2 to 20 dBm:
-  // rf95.setTxPower(20, false);
+  //rf95.setTxPower(20, false);
 
   // Collect the data
   int groupCount = 0;
@@ -82,9 +88,10 @@ void setup()
   uint8_t packet[PACKET_SIZE];
   uint8_t packetId = 0;
 
+  unsigned long start = millis();
   for (int i = 0; i < groupCount; i += GROUPS_PER_PACKET) {
     memset(packet, 0, PACKET_SIZE); 
-
+    packetId++;
     packet[0] = packetId;  // package ID
     int groupThisPacket = min(GROUPS_PER_PACKET, groupCount - i); // consider the last set.
 
@@ -127,12 +134,41 @@ void setup()
     }
     delay(400);
   }
-  Serial.println("sending ended");
+  unsigned long end = millis();
+  Serial.printf("%d sets of data sent, time consumption: %.2f s\n", groupCount, (end - start) / 1000.0);
 }
 
 void loop()
 {
+//   Serial.println("Sending to rf95_server");
+//   // Send a message to rf95_server
+//   uint8_t data[] = "Hello World!";
+//   rf95.send(data, sizeof(data));
   
-}
+//   rf95.waitPacketSent();
+//   // Now wait for a reply
+//   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+//   uint8_t len = sizeof(buf);
 
+//   if (rf95.waitAvailableTimeout(3000))
+//   { 
+//     // Should be a reply message for us now   
+//     if (rf95.recv(buf, &len))
+//    {
+//       Serial.print("got reply: ");
+//       Serial.println((char*)buf);
+// //      Serial.print("RSSI: ");
+// //      Serial.println(rf95.lastRssi(), DEC);    
+//     }
+//     else
+//     {
+//       Serial.println("recv failed");
+//     }
+//   }
+//   else
+//   {
+//     Serial.println("No reply, is rf95_server running?");
+//   }
+//   delay(400);
+}
 
