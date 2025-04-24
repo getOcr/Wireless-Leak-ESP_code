@@ -35,6 +35,9 @@ void setup()
   while (!Serial) ; // Wait for serial port to be available
   SPI.begin(5, 19, 18);  // SCK, MISO, MOSI, for both sensor and LoRa module
 
+  pinMode(21, OUTPUT); digitalWrite(21, HIGH); // sensor CS
+  pinMode(33, OUTPUT); digitalWrite(33, HIGH); // LoRa CS
+  pinMode(32, OUTPUT); digitalWrite(32, HIGH); // LoRa RST
   // disable WiFi in case NVS
   WiFi.disconnect(true);  
   delay(100);
@@ -47,16 +50,20 @@ void setup()
 
   // LoRa p2p
   if (!rf95.init()){
-    Serial.println("init() failed");
+    Serial.println("rf95.init() failed");
   }else{
-    Serial.println("init() success");
+    Serial.println("rf95.init() success");
   }
   
+  uint8_t reg26 = rf95.spiRead(0x26);
+  Serial.printf("RegModemConfig3 (0x26) = 0x%02X\n", reg26);
+  //reg26 |= 0x08;  // set bit3 = 1，LowDataRateOptimize
+  //rf95.spiWrite(0x26, reg26);
+
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
-  rf95.setFrequency(915.0);
   // You can change the modulation parameters with eg
   //rf95.setModemConfig(RH_RF95::Bw500Cr45Sf128);
-  rf95.setModemConfig(RH_RF95::Bw125Cr45Sf2048);
+  // We configured that in RH_RF95.cpp
   //rf95.spiWrite(0x26, 0x08);
   //rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);
   // The default transmitter power is 13dBm, using PA_BOOST.

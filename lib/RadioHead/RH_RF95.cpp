@@ -63,9 +63,10 @@ bool RH_RF95::init()
     // Check we are in sleep mode, with LORA set
     if (spiRead(RH_RF95_REG_01_OP_MODE) != (RH_RF95_MODE_SLEEP | RH_RF95_LONG_RANGE_MODE))
     {
-//	Serial.println(spiRead(RH_RF95_REG_01_OP_MODE), HEX);
+	Serial.println(spiRead(RH_RF95_REG_01_OP_MODE), HEX);
 	return false; // No device present?
     }
+    Serial.println(spiRead(RH_RF95_REG_01_OP_MODE), HEX);
 
     
     // Set up FIFO
@@ -86,10 +87,11 @@ bool RH_RF95::init()
     // No Sync Words in LORA mode. ACTUALLY thats not correct, and for tehRF95, the default LoRaSync Word is 0x12
     // (ie a private network) and it can be changed at RH_RF95_REG_39_SYNC_WORD
     setModemConfig(Bw125Cr45Sf128); // Radio default
-//    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
+    //setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
+    //setModemConfig(Bw125Cr45Sf2048);
     setPreambleLength(8); // Default is 8
     // An innocuous ISM frequency, same as RF22's
-    setFrequency(434.0);
+    setFrequency(915.0);
     // Lowish power
     setTxPower(13);
 
