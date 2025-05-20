@@ -8,13 +8,28 @@ extern LIS3DH sensor;
 
 QueueHandle_t sensorDataQueue = NULL;
 TaskHandle_t LoRaSendTaskHandle = NULL;
-TaskHandle_t LoRaReceiveTaskHandle = NULL;
 esp_timer_handle_t sampling_timer;
 volatile bool isSending = false;
 float batteryVoltage = 0.0;
 
 #define LED_PIN 2
 #define BAT_ADC_PIN 34
+
+// CRC16
+uint16_t calculateCRC16(const uint8_t* data, size_t length) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < length; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            if (crc & 0x0001) {
+                crc = (crc >> 1) ^ 0xA001;
+            } else {
+                crc = crc >> 1;
+            }
+        }
+    }
+    return crc;
+}
 
 void IRAM_ATTR onSampleTimer(void* arg) {
     LIS3DH* sensor = (LIS3DH*) arg;
@@ -28,12 +43,14 @@ void IRAM_ATTR onSampleTimer(void* arg) {
         // The 3rd argu NULL means no "woken" is supported
 }
 
-void LoRaSendTask(void *pvParameters) { // pv means pointer to void
+void LoRaSendTask(void *pvParameters) {
     uint8_t packet[255];
     uint8_t packetId = 0;
     int16_t group[4];
     const int GROUP_BYTE_SIZE = 8;
     const int GROUPS_PER_PACKET = 30;
+    const int MAX_RETRIES = 3; // max retry times
+    const int RETRY_DELAY_MS = 100; // wait ACK for 100ms
 
     while (true) {
         int groupCount = 0;
@@ -55,33 +72,51 @@ void LoRaSendTask(void *pvParameters) { // pv means pointer to void
         }
 
         if (groupCount > 0) {
-            isSending = true;
-            rf95.send(packet, 1 + groupCount * GROUP_BYTE_SIZE);
-            rf95.waitPacketSent();
-            isSending = false;
-            Serial.printf("[LoRa] Sent %d groups\n", groupCount);
-        }
+            // calculate CRC
+            uint16_t crc = calculateCRC16(packet, 1 + groupCount * GROUP_BYTE_SIZE);
+            packet[1 + groupCount * GROUP_BYTE_SIZE] = (crc >> 8) & 0xFF;
+            packet[1 + groupCount * GROUP_BYTE_SIZE + 1] = crc & 0xFF;
 
-        vTaskDelay(pdMS_TO_TICKS(200)); // suspend sending task and give the CPU runtime to other lower-priority task
-    }
-}
+            // send data and wait for ACK
+            bool ackReceived = false;
+            int retryCount = 0;
+            
+            while (!ackReceived && retryCount < MAX_RETRIES) {
+                isSending = true;
+                rf95.send(packet, 1 + groupCount * GROUP_BYTE_SIZE + 2); // +2 for CRC
+                rf95.waitPacketSent();
+                isSending = false;
 
-void LoRaReceiveTask(void *pvParameters) {
-    uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-    uint8_t len = sizeof(buf);
+                // wait ACK
+                uint32_t startTime = millis();
+                while (millis() - startTime < RETRY_DELAY_MS) {
+                    if (rf95.available()) {
+                        uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+                        uint8_t len = sizeof(buf);
+                        if (rf95.recv(buf, &len)) {
+                            if (buf[0] == packetId) { 
+                                ackReceived = true;
+                                int16_t rssi = rf95.lastRssi();
+                                Serial.printf("[LoRa] Packet #%d sent successfully, RSSI = %d dBm\n", packetId, rssi);
+                                break;
+                            }
+                        }
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(1));
+                }
+                
+                if (!ackReceived) {
+                    retryCount++;
+                    Serial.printf("[LoRa] Retry %d/%d for packet #%d\n", retryCount, MAX_RETRIES, packetId);
+                }
+            }
 
-    while (true) {
-        if (rf95.available()) {
-            if (rf95.recv(buf, &len)) {
-                Serial.print("[LoRa RX] Got reply: ");
-                Serial.println((char*)buf);
-                Serial.print("[LoRa RX] RSSI: ");
-                Serial.println(rf95.lastRssi(), DEC);
-            } else {
-                Serial.println("[LoRa RX] recv failed");
+            if (!ackReceived) {
+                Serial.printf("[LoRa] Failed to send packet #%d after %d retries\n", packetId, MAX_RETRIES);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -113,11 +148,9 @@ void startTasks() {
         Serial.println("[Error] Failed to create sensorDataQueue!");
     }
 
-    xTaskCreatePinnedToCore(LoRaSendTask, "LoRaSendTask", 4096, NULL, 3, &LoRaSendTaskHandle, 1);
-    xTaskCreatePinnedToCore(LoRaReceiveTask, "LoRaReceiveTask", 2048, NULL, 2, &LoRaReceiveTaskHandle, 1);
+    xTaskCreatePinnedToCore(LoRaSendTask, "LoRaSendTask", 4096, NULL, 3, &LoRaSendTaskHandle, 1); // 4096*32 bytes is the stack size, word size is 32 in esp32 
     xTaskCreatePinnedToCore(StatusLedTask, "StatusLedTask", 2048, NULL, 1, NULL, 1);
     xTaskCreatePinnedToCore(BatteryMonitorTask, "BatteryMonitorTask", 2048, NULL, 1, NULL, 1);
-    
     
     // use esp harware timer for Sensor data collection
     esp_timer_create_args_t timer_args = {

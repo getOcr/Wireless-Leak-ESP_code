@@ -41,7 +41,6 @@ extern esp_timer_handle_t sampling_timer;
 */
 extern QueueHandle_t sensorDataQueue;
 extern TaskHandle_t LoRaSendTaskHandle;
-extern TaskHandle_t LoRaReceiveTaskHandle;
 
 /**
  * LED indicator
